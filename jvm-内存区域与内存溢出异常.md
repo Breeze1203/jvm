@@ -52,11 +52,15 @@ Object obj=new Object()，假设这句代码出现在方法体里面，那<u>Obj
 
 引用类型定义这个引用应该通过那种方式去定位，主流的访问方式有两种：使用**句柄**和**直接指针**
 
-- 句柄访问：java堆中会划分出一块内存来作为句柄池，reference中存储的就是对象的句柄地址，而句柄中包含了实例数据和类型数据各种各自具体地址信息
+##### 句柄访问
+
+java堆中会划分出一块内存来作为句柄池，reference中存储的就是对象的句柄地址，而句柄中包含了实例数据和类型数据各种各自具体地址信息
 
 ![](./jpeg/句柄池.png)
 
-- 指针访问：堆对象的布局中要考虑如何放置访问类型数据的相关的信息，reference中直接存储的就是对象地址
+##### 指针访问
+
+堆对象的布局中要考虑如何放置访问类型数据的相关的信息，reference中直接存储的就是对象地址
 
 ![](./jpeg/指针.png)
 
@@ -64,5 +68,145 @@ Object obj=new Object()，假设这句代码出现在方法体里面，那<u>Obj
 
 ### 实战：OutOfMemoryError异常
 
-- 堆溢出：只要我们不断创建对象，并且保证GC Roots到对象之间有可达路径来避免垃圾回收机制来清除这些对象，就会在对象数量到达最大堆的容量限制后产生内存溢出异常 ，设置堆的最小值-Xms，最大值-Xms，另外通过参数-XX:+HeapDumpOnOutOfMemoryError可以让虚拟机在出现内存溢出异常时Dump出当前的内存堆转储快照一以便事后分析
+##### 堆溢出
+
+只要我们不断创建对象，并且保证GC Roots到对象之间有可达路径来避免垃圾回收机制来清除这些对象，就会在对象数量到达最大堆的容量限制后产生内存溢出异常 ，设置堆的最小值-Xms，最大值-Xms，另外通过参数-XX:+HeapDumpOnOutOfMemoryError可以让虚拟机在出现内存溢出异常时Dump出当前的内存堆转储快照一以便事后分析
+
+MV Args: -Xms20m -Xmx20m -XX:+HeapDumpOnOutOfMemoryError
+
+```java
+public class HeapooM (
+
+static class OOMObject {
+}
+
+public static void main (Stringl) args) {
+List<00MObject> l i s t = new ArrayList<OOMObject>() ; while (true) (
+list. ad (new OOMObject ()) :
+
+}
+```
+
+##### 虚拟机栈和本地方法栈溢出
+
+-Xoss参数（设置本地方法栈大小，虽然存在，但实际上无效），栈容量只由-Xss参数设定，关于虚拟机栈和本地方法栈，虚拟机规范中描述了两种异常
+
+- [ ]  如果线程请求的栈深度大虚拟机所允许的最大深度 ，将抛出StackOverflowError异常。
+- [ ] 又如果虚拟机在扩展栈时无法申请到足够的内存空间，则抛出OutOfMemoryError 异常
+
+```java
+/*
+* MV Args: -Xss128k * @author zzm
+*/
+public class JavaVMStackSOF {
+  
+private int stackLength= 1;
+  
+public void stackLeak (){
+  stackLength++;
+  s t a c k L e a k ();
+}
+  
+  
+public s t a t i c void main(String() args) throws
+Throwable {
+JavaVMStackSOF oom = new JavaVMStackSOF () ; 
+try{
+     oom.stackLeak () ; 
+catch(Throwable e) {
+     System.out.println("stack length:"+ oom.stackLength) ;
+throw e;
+}
+  
+  
+运行结果:
+stack length:2402
+Exception ni thread "main" java. lang.StackOverflowError
+at org.fenixsoft.oom.VMStackSOF.leak (VMStackSOF.java:20)
+```
+
+实验结果表明，无论是由于栈桢太大，还是虚拟机栈容量太小，当内存无法分配的时候，都是抛出StackOverflowError
+
+##### 运行时常量池溢出
+
+如果要向运行时常量池中添加内容，最简单的做法是使用Strinf.intern()这个native方法，这个方法的作用是如果池中包含一个等一此String对象的字符串，则返回代表池中这个字符串的String对象，否则，将此String对象包含的字符串添加到常量池中，并返回此s tring对象的引用，由于常量池分配在方法区，可以通过-XX:PermSize和-XX:MaxPermSiza限制方法区的大小，从而限制常量池的容量
+
+```java
+/*
+*MV Args: X-X: PermSize=10M -XX:MaxPermSize=10M * @author zm
+*/
+public class RuntimeConstant Pool00M (
+public static void main(String() args) (
+// 使用List 保持着常量池引用，避免FU11 GC回收常量池行为 
+  List<String> list = new ArrayList<String>();
+// 10MB的Permsize在integer 范園內足够产生0OM了
+  int i = 0;
+while (true) {
+list.add (String.valueof (i++) .intern());
+}
+
+运行结果:
+Exception in thread "main" java.lang.OutOfMemoryError: Permen space
+at java.lang.String. intern (Native Method)
+at org.fenixsoft.oom. RuntimeConstantPool00M.main (RuntimeConstantPoolOOM.java:18)
+```
+
+从运行结果中可以看到，运行时常量池溢出，在OutOfMemoryError后面跟随的提 示 信 息 是 “ PermGenspace ” ， 说 明 **运 行 时 常 量 池 属 于 方 法 区** (HotSpot 虚 拟 机 中 的 永 久 代)的 一部分。
+
+##### 方法区溢出
+
+方 法 区 用 于存 放 Class 的 相 关 信 息 ， 如 类 名 、 访 问 修 饰 符 、 常 量 池 、 字 段 描 述、方法描述等。对 于这个区域的测试，基本的思路是运行时产生大量的类去填 满方法区，直到溢出。虽然直接使用Java SE API 也可以动态产生类 (如反射时的 GeneratedConstructorAccessor 和动态代理等)，但在本次实验中操作起来比较麻 烦。下面，笔者借助CGLib“直接操作字节码运行时，生成了大量的 动态类。
+值得特别注意的是，我们在这个例子中模拟的场景并非纯粹是一个实验，这样的应 用经常会出现在实际应用中:当前的很多主流框架，如Spring和Hibernat e对类进行增 强时，都会使用到CGLib 这类字节码技术，增强的类越多，就需要越大的方法区来保证 动态生成的Class 可以加载人内存
+
+```java
+/**
+* MV Args: -XX: Permsize=10M -XX:MaxPermSize=10M * @author zzm
+*/
+public class JavaMethodAreaOoM (
+  
+public static void main(String() args) {
+  while(true) {
+     Enhancer enhancer = new Enhancer (); 
+     enhancer. setSuperclass (00MObject.class);
+     enhancer. setUseCache (false);
+     enhancer. setCallback (new MethodInterceptor () (
+         public Object intercept (Object obj, Method method, Object () args, MethodProxy proxy) throws Throwable {
+           return proxy.invokeSuper (obj, args) ;
+         }
+});
+enhancer.create();
+                            }
+                         }
+static class OOMObject{}
+}
+
+                            
+运行结果:
+Caused by: java.lang.OutOfMemoryError: PermGen space at java. lang.ClassLoader.defineClass1 (Native Method)
+at java.lang.ClassLoader.defineClassCond(Classloader.java:632) at java.lang.ClassLoader.defineClass(ClassLoader.java:616)
+... 8more
+```
+
+方法区溢出也是一种常见的内存溢出异常， 一个类如果要被垃圾收集器回收掉，判 定条件是非常苛刻的。在经常动态生成大量Class 的应用中，需要特别注意类的回收状 况。这类场景除了上面提到的程序使用了GCLib 字节码增强外，常见的还有:<u>大量JSP 或 动 态 产 生 JSP 文 件 的 应 用 (JSP 第 一次 运 行 时 需 要 编 译 为 Java 类 )</u>、 基 于 OSGi 的 应 用 (即使是同 一个类文件，被不同的加载器加载也会视为不同的类)等
+
+##### 本地直接内存溢出
+
+DirectMemory容量可通过-XX:MaxDirectMemorySize指定，如果不指定，则 默 认 与 Java 堆 的 最 大 值 (- X m x 指 定 ) 一 样 。 代 码 清 单 2 - 6 越 过 了 DirectByteBuffer 类 ， 直 接 通 过 反 射 获 取 Unsafe 实 例 并 进 行 内 存 分 配 (Unsafe类 的getUnsafe ()方 法限制了只有引导类加载器才会返回实例，也就是设计者希望只有rt.jar 中的类 才能使用Unsafe的功能)。因为，虽然使用DirectByteBuffer 分配内存也会抛出 内存溢出异常，但它抛出异常时并没有真正向操作系统申请分配内存，而是通过 计 算 得 知 内 存 无 法 分 配 ， 于是 手动 抛 出 异 常 ， 真 正 申 请 分 配 内 存 的 方 法 是 unsafeallocateMemory.
+
+```java
+MV Args: -Xmx20M -XX:MaxDirectMemorySize=10M * @author zzm
+*/
+public class DirectMemoryOOM {
+  
+     private static final int M_IB = 1024 * 1024;
+  
+     public static void main(String() args) throws Exception { 
+       Field unsafeField = Unsafe.class.getDeclaredFields() [0);        unsafeField. setAccessible (true);
+       Unsafe unsafe = (Unsafe) unsafeField.get (null) ;
+       while (true){
+       unsafe.allocateMemory (_1MB);
+       }
+    } 
+}
+```
 
